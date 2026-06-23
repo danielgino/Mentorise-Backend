@@ -9,6 +9,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -39,7 +40,7 @@ public class GeminiService {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
 
         String url = geminiUrl + "?key=" + apiKey;
-        log.info("Gemini URL: {}", geminiUrl);
+        log.debug("Gemini URL: {}", geminiUrl);
         GeminiResponse response = restTemplate.postForObject(url, entity, GeminiResponse.class);
 
         if (response == null || response.candidates == null || response.candidates.isEmpty()) {
@@ -53,8 +54,17 @@ public class GeminiService {
         try {
             String rawText = generate(prompt);
             return objectMapper.readValue(rawText, responseType);
+        } catch (HttpServerErrorException e) {
+            if (e.getStatusCode().value() == 503) {
+                log.warn("Gemini unavailable, using fallback tutor match reasons");
+            } else {
+                log.warn("Gemini request failed (HTTP {}), using fallback tutor match reasons", e.getStatusCode().value());
+            }
+            log.debug("Gemini error details: {}", e.getMessage());
+            return null;
         } catch (Exception e) {
-            log.warn("Gemini structured response failed: {}", e.getMessage());
+            log.warn("Gemini response parsing failed ({}), using fallback tutor match reasons", e.getClass().getSimpleName());
+            log.debug("Gemini error details: {}", e.getMessage());
             return null;
         }
     }

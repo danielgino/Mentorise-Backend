@@ -37,7 +37,7 @@ public class TutorMatchReasonService {
 
         try {
             String prompt = buildPrompt(cards, snapshot, majorName);
-            log.info("Sending Gemini prompt:\n{}", prompt);
+            log.debug("Sending Gemini prompt:\n{}", prompt);
             MatchReasonItem[] items = geminiService.generateStructured(prompt, MatchReasonItem[].class);
 
             if (items == null) {
@@ -66,7 +66,8 @@ public class TutorMatchReasonService {
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
-            log.error("Gemini enrichment failed: {} — {}", e.getClass().getName(), e.getMessage(), e);
+            log.warn("Tutor enrichment failed, returning unranked results: {}", e.getMessage());
+            log.debug("Tutor enrichment error details:", e);
             return cards;
         }
     }
