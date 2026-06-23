@@ -1,6 +1,7 @@
 package com.example.mentorisebackend.service.tutor;
 
 import com.example.mentorisebackend.dto.tutor.TutorCardDto;
+import com.example.mentorisebackend.enums.ScopeType;
 import com.example.mentorisebackend.service.ai.GeminiService;
 import com.example.mentorisebackend.service.user.UserScopeSnapshot;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -41,7 +42,7 @@ public class TutorMatchReasonService {
             MatchReasonItem[] items = geminiService.generateStructured(prompt, MatchReasonItem[].class);
 
             if (items == null) {
-                return cards;
+                return applyFallbackReasons(cards, snapshot);
             }
 
             Map<Long, String> reasonMap = new HashMap<>();
@@ -61,15 +62,41 @@ public class TutorMatchReasonService {
                             card.years(),
                             card.courses(),
                             card.isAlumni(),
-                            reasonMap.getOrDefault(card.id(), null)
+                            reasonMap.getOrDefault(card.id(), fallbackReason(card, snapshot))
                     ))
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
             log.warn("Tutor enrichment failed, returning unranked results: {}", e.getMessage());
             log.debug("Tutor enrichment error details:", e);
-            return cards;
+            return applyFallbackReasons(cards, snapshot);
         }
+    }
+
+    private List<TutorCardDto> applyFallbackReasons(List<TutorCardDto> cards, UserScopeSnapshot snapshot) {
+        return cards.stream()
+                .map(card -> new TutorCardDto(
+                        card.id(),
+                        card.fullName(),
+                        card.majorName(),
+                        card.bio(),
+                        card.tutorImageUrl(),
+                        card.years(),
+                        card.courses(),
+                        card.isAlumni(),
+                        fallbackReason(card, snapshot)
+                ))
+                .collect(Collectors.toList());
+    }
+
+    private String fallbackReason(TutorCardDto card, UserScopeSnapshot snapshot) {
+        if (snapshot.mode() == ScopeType.COURSE && !card.courses().isEmpty()) {
+            return "מתרגל מתאים לקורסים שבחרת";
+        }
+        if (card.bio() != null && !card.bio().isBlank()) {
+            return "מתרגל עם ניסיון רלוונטי שיכול לעזור לך להתקדם";
+        }
+        return "מתרגל מהמסלול שלך, זמין לעזור בקורסים שונים";
     }
 
     private String buildPrompt(List<TutorCardDto> cards, UserScopeSnapshot snapshot, String majorName) {
