@@ -1,9 +1,11 @@
 package com.example.mentorisebackend.handler;
 
 import com.example.mentorisebackend.dto.admin.ErrorResponseDto;
+import com.example.mentorisebackend.dto.auth.RateLimitErrorResponseDto;
 import com.example.mentorisebackend.exception.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -15,6 +17,19 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<RateLimitErrorResponseDto> handleRateLimit(RateLimitExceededException ex) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Retry-After", String.valueOf(ex.getRetryAfterSeconds()));
+        return ResponseEntity.status(429)
+                .headers(headers)
+                .body(new RateLimitErrorResponseDto(
+                        "RATE_LIMIT_EXCEEDED",
+                        "בוצעו יותר מדי ניסיונות התחברות. נסה שוב בעוד 15 דקות.",
+                        ex.getRetryAfterSeconds()
+                ));
+    }
 
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ErrorResponseDto> handleUserNotFound(UserNotFoundException ex) {

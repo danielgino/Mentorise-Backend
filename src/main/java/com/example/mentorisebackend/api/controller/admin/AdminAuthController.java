@@ -1,11 +1,13 @@
 package com.example.mentorisebackend.api.controller.admin;
 
-import com.example.mentorisebackend.dto.admin.ErrorResponseDto;
 import com.example.mentorisebackend.dto.admin.ForgotPasswordRequestDto;
 import com.example.mentorisebackend.dto.admin.ResetPasswordRequestDto;
+import com.example.mentorisebackend.dto.auth.InvalidCredentialsResponseDto;
 import com.example.mentorisebackend.dto.auth.LoginRequestDto;
 import com.example.mentorisebackend.service.admin.AdminAuthService;
 import com.example.mentorisebackend.service.admin.AdminPasswordResetService;
+import com.example.mentorisebackend.service.auth.LoginRateLimitService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,15 +23,21 @@ public class AdminAuthController {
 
     private final AdminAuthService adminAuthService;
     private final AdminPasswordResetService adminPasswordResetService;
+    private final LoginRateLimitService loginRateLimitService;
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequestDto request) {
+    public ResponseEntity<?> login(@RequestBody LoginRequestDto request, HttpServletRequest httpRequest) {
+        String ip    = httpRequest.getRemoteAddr();
+        String email = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : "";
+
+        loginRateLimitService.checkRateLimit(email, ip);
         try {
-            return ResponseEntity.ok(adminAuthService.login(request));
+            var result = adminAuthService.login(request);
+            loginRateLimitService.onSuccess(email, ip);
+            return ResponseEntity.ok(result);
         } catch (AuthenticationException e) {
-            return ResponseEntity.status(401).body(
-                    new ErrorResponseDto("InvalidCredentials", "Invalid email or password", 401)
-            );
+            InvalidCredentialsResponseDto body = loginRateLimitService.onFailure(email, ip);
+            return ResponseEntity.status(401).body(body);
         }
     }
 

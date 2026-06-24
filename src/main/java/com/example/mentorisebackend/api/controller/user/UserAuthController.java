@@ -1,13 +1,15 @@
 package com.example.mentorisebackend.api.controller.user;
 
 
+import com.example.mentorisebackend.dto.auth.InvalidCredentialsResponseDto;
 import com.example.mentorisebackend.dto.auth.LoginRequestDto;
-import com.example.mentorisebackend.dto.admin.ErrorResponseDto;
 import com.example.mentorisebackend.dto.auth.ForgotPasswordRequest;
 import com.example.mentorisebackend.dto.auth.RegisterDto;
 import com.example.mentorisebackend.dto.auth.ResetPasswordRequest;
+import com.example.mentorisebackend.service.auth.LoginRateLimitService;
 import com.example.mentorisebackend.service.auth.UserAuthService;
 import com.example.mentorisebackend.service.auth.UserPasswordResetService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +25,7 @@ public class UserAuthController {
 
     private final UserAuthService userAuthService;
     private final UserPasswordResetService userPasswordResetService;
+    private final LoginRateLimitService loginRateLimitService;
 
     @PostMapping("/register")
     public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterDto dto) {
@@ -35,13 +38,18 @@ public class UserAuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequestDto request) {
+    public ResponseEntity<?> login(@RequestBody LoginRequestDto request, HttpServletRequest httpRequest) {
+        String ip    = httpRequest.getRemoteAddr();
+        String email = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : "";
+
+        loginRateLimitService.checkRateLimit(email, ip);
         try {
-            return ResponseEntity.ok(userAuthService.login(request));
+            var result = userAuthService.login(request);
+            loginRateLimitService.onSuccess(email, ip);
+            return ResponseEntity.ok(result);
         } catch (AuthenticationException e) {
-            return ResponseEntity.status(401).body(
-                    new ErrorResponseDto("InvalidCredentials", "Invalid email or password", 401)
-            );
+            InvalidCredentialsResponseDto body = loginRateLimitService.onFailure(email, ip);
+            return ResponseEntity.status(401).body(body);
         }
     }
 
